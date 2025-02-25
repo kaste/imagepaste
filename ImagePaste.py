@@ -1,222 +1,253 @@
+from __future__ import annotations
+import base64
+import datetime
+import io
+from itertools import zip_longest
+import os
+from pathlib import Path
+import platform
+import shutil
+import tempfile
+from urllib.parse import quote
+
+from PIL import Image, ImageGrab
+
 import sublime
 import sublime_plugin
-import os
-import sys
-import re
-import subprocess
-import shutil
-from imp import reload
-
-print(sys.getdefaultencoding())
-reload(sys)
-# sys.setdefaultencoding('utf-8')
-
-if sys.platform == 'win32':
-	package_file = os.path.normpath(os.path.abspath(__file__))
-	package_path = os.path.dirname(package_file)
-	lib_path =  os.path.join(package_path, "lib")
-	if lib_path not in sys.path:
-	    sys.path.append(lib_path)
-	    print(sys.path)
-	from PIL import ImageGrab
-	from PIL import ImageFile
-	from PIL import Image
-
-class ImageCommand(object):
-	def __init__(self, *args, **kwgs):
-		super(ImageCommand, self).__init__(*args, **kwgs)
-		self.settings = sublime.load_settings('imagepaste.sublime-settings')
-
-		# get the image save dirname
-		self.image_dir_name = self.settings.get('image_dir_name', None)
-		if len(self.image_dir_name) == 0:
-			self.image_dir_name = None
-		print("[%d] get image_dir_name: %r"%(id(self.image_dir_name), self.image_dir_name))
-
-	def run_command(self, cmd):
-		cwd = os.path.dirname(self.view.file_name())
-		print("cmd %r" % cmd)
-		proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=os.environ)
-		
-		try:
-		    outs, errs = proc.communicate(timeout=15)
-		    print("outs %r %r" % (outs, proc))
-		except Exception:
-		    proc.kill()
-		    outs, errs = proc.communicate()
-		print("outs %r, errs %r" % (b'\n'.join(outs.split(b'\r\n')), errs))
-		if errs is None or len(errs) == 0:
-			return outs.decode()
-		
-	def get_filename(self):
-		view = self.view
-		filename = view.file_name()
-
-		# create dir in current path with the name of current filename
-		dirname, _ = os.path.splitext(filename)
-
-		# create new image file under currentdir/filename_without_ext/filename_without_ext%d.png
-		fn_without_ext = os.path.basename(dirname)
-		if self.image_dir_name is not None:
-			subdir_name = os.path.join(os.path.split(dirname)[0], self.image_dir_name)
-		else:
-			subdir_name = dirname
-		if not os.path.lexists(subdir_name):
-			os.mkdir(subdir_name)
-		i = 0
-		while True:
-			# relative file path
-			rel_filename = os.path.join("%s/%s%d.png" % (self.image_dir_name if self.image_dir_name else fn_without_ext, fn_without_ext, i))
-			# absolute file path
-			abs_filename = os.path.join(subdir_name, "%s%d.png" % (fn_without_ext, i))
-			if not os.path.exists(abs_filename):
-				break
-			i += 1
-
-		print("save file: " + abs_filename + "\nrel " + rel_filename)
-		return abs_filename, rel_filename
-
-class ImagePasteCommand(ImageCommand, sublime_plugin.TextCommand):
-
-	def run(self, edit):
-		view = self.view
-		print("[%d] image_dir_name: %r"%(id(self.image_dir_name),self.image_dir_name))
-		rel_fn = self.paste()
-
-		if not rel_fn:
-			view.run_command("paste")
-			return
-		for pos in view.sel():
-			# print("scope name: %r" % (view.scope_name(pos.begin())))
-			if 'text.html.markdown' in view.scope_name(pos.begin()):
-				view.insert(edit, pos.begin(), "![](%s)" % rel_fn)
-			else:
-				view.insert(edit, pos.begin(), "%s" % rel_fn)
-			# only the first cursor add the path
-			break
-			
-
-	def paste(self):
-		if sys.platform != 'win32':
-			dirname = os.path.dirname(__file__)
-			command = ['/usr/bin/python3', os.path.join(dirname, 'bin/imageutil.py'), 'save']
-			abs_fn, rel_fn = self.get_filename()
-			command.append(abs_fn)
-
-			out = self.run_command(" ".join(command))
-			if out and out[:4] == "save":
-				return rel_fn
-		else: # win32
-			ImageFile.LOAD_TRUNCATED_IMAGES = True
-			im = ImageGrab.grabclipboard()
-			if im:
-				abs_fn, rel_fn = self.get_filename()
-				im.save(abs_fn,'PNG')	
-				return rel_fn
-
-		print('clipboard buffer is not image!')
-		return None
 
 
+class image_paste(sublime_plugin.TextCommand):
+    def run(self, edit, confirm_filename=True):
+        view = self.view
+        window = view.window()
+        if not window:
+            return
+        root_dir = get_root_dir(view)
+        full_path = save_clipboard_image(root_dir)
+        if not full_path:
+            window.status_message("No image in clipboard")
+            return
 
-class ImageGrabCommand(ImageCommand, sublime_plugin.TextCommand):
-	def run(self, edit):
-		view = self.view
-		rel_fn = self.paste()
-		if not rel_fn:
-			view.run_command("paste")
-			return
-		for pos in view.sel():
-			# print("scope name: %r" % (view.scope_name(pos.begin())))
-			if 'text.html.markdown' in view.scope_name(pos.begin()):
-				view.insert(edit, pos.begin(), "![](%s)" % rel_fn)
-			else:
-				view.insert(edit, pos.begin(), "%s" % rel_fn)
-			# only the first cursor add the path
-			break
-			
+        if confirm_filename:
+            def on_done(input_string):
+                if not input_string:
+                    on_cancel()
+                    return
 
-	def paste(self):
-		# ImageFile.LOAD_TRUNCATED_IMAGES = True
-		dirname = os.path.dirname(__file__)
-		command = ['/usr/bin/python3', os.path.join(dirname, 'bin/imageutil.py'), 'grab']
-		abs_fn, rel_fn = self.get_filename()
-		tempfile1 = "/tmp/imagepaste1.png"
-		command.append(tempfile1)
-		print("command: ", command)
+                dir = os.path.dirname(input_string)
+                os.makedirs(dir, exist_ok=True)
+                shutil.move(full_path, input_string)
+                self.insert_image_path(input_string)
 
-		out = self.run_command(" ".join(command))
-		if out and out[:4] == "grab":
-			ret = sublime.ok_cancel_dialog("save to file?")
-			print("ret %r" % ret)
-			if ret:
-				shutil.move(tempfile1, abs_fn)
-				return rel_fn
-			else:
-				return None
-		# im = ImageGrab.grabclipboard()
-		# if im:
-		# 	abs_fn, rel_fn = self.get_filename()
-		# 	im.save(abs_fn,'PNG')	
-		# 	return rel_fn
-		else:
-			print('clipboard buffer is not image!')
-			return None
+            def on_cancel():
+                try:
+                    os.remove(full_path)
+                    os.rmdir(os.path.dirname(full_path))
+                except Exception:
+                    pass
 
+            window.show_input_panel("Filename:", full_path, on_done, None, on_cancel)
 
-class ImagePreviewCommand(ImageCommand, sublime_plugin.TextCommand):
-	def __init__(self, *args):
-	#	self.view = view
-		super(ImagePreviewCommand, self).__init__(*args)	    
-		# self.phantom_set = sublime.PhantomSet(self.view)
-		self.displayed = False
+        else:
+            self.insert_image_path(full_path)
+
+    def insert_image_path(self, full_path: str) -> None:
+        view = self.view
+        file_name = view.file_name()
+        if file_name:
+            text_to_insert = os.path.relpath(full_path, os.path.dirname(file_name))
+        else:
+            text_to_insert = full_path
+        for pos in view.sel():
+            if 'text.html.markdown' in view.scope_name(pos.begin()):
+                text_to_insert = f"![]({quote(text_to_insert)})"
+            view.run_command("insert", {"characters": text_to_insert})
+            break
 
 
+def get_root_dir(view: sublime.View) -> str:
+    root = view.settings().get("image_paste_folder")
+    if root:
+        if root.startswith('//'):
+            window = view.window()
+            if not window:
+                raise ValueError(
+                    f"view is detached but image_paste_folder ('{root}') "
+                    f"is set to be relative to one."
+                )
+            folders = window.folders()
+            if not folders:
+                raise ValueError(
+                    f"window has no folders attached to it but image_paste_folder ('{root}') "
+                    f"is set to be relative to one."
+                )
+            return os.path.join(folders[0], root[2:])
+        if os.path.isabs(root):
+            return root
+        if file_name := view.file_name():
+            return os.path.normpath(os.path.join(os.path.dirname(file_name), root))
+        raise ValueError(
+            f"view is unnamed but image_paste_folder ('{root}') "
+            f"is set to be relative to one."
+        )
+
+    if file_name := view.file_name():
+        return os.path.dirname(file_name)
+    if (window := view.window()) and (folders := window.folders()):
+        return folders[0]
+    raise ValueError("view is unnamed and 'image_paste_folder' is not set.")
 
 
-	def get_line(self):
-		v = self.view
-		rows, _ = v.rowcol(v.size())
-		for row in range(rows+1):
-			pt = v.text_point(row, 0)
-			tp_line = v.line(pt)
-			line = v.substr(tp_line)
-			yield tp_line, line
-		raise StopIteration
+def save_clipboard_image(root_dir: str) -> str | None:
+    """
+    Checks if an image is in the clipboard, saves it as a PNG file (or JPG if
+    PNG is not possible), and returns the filename. Returns None if no image
+    is in the clipboard. Works cross-platform on Windows, macOS, and Linux.
 
-	def run(self, edit):
-		print("run phantom")
-		view = self.view
-		dirname = os.path.dirname(__file__)
-		for tp, line in self.get_line():
-			m=re.search(r'!\[([^\]]*)\]\(([^)]*)\)', line)
-			if m:
-				name, file1 = m.group(1), m.group(2)
-				message = ""
-				file2 = os.path.join(os.path.dirname(view.file_name()), file1)
-				# print("%s = %s" % (name, file1))
-				region = tp
+    Returns:
+        str or None: The filename of the saved image or None if no image was
+                     found
 
-				command = ['/usr/bin/python3', os.path.join(dirname, 'bin/imageutil.py'), 'size']
-				command.append(file2)
+    Raises:
+        ValueError: If the image cannot be processed or saved in the specified formats
+        ImportError: If required modules like PIL.ImageGrab are not available on the system
+    """
+    # ImageGrab.grabclipboard() can raise ImportError on some platforms
+    clipboard_image = ImageGrab.grabclipboard()
 
-				out = self.run_command(" ".join(command))
-				widthstr, heightstr = out.split(',')
-				# with Image.open(file2) as im:
-				# print("file: %s with size: %d %d" % (file1, im.width, im.height))
-				message = '''<body>
-				<img width="%s" height="%s" src="file://%s"></img>
-				</body>''' % (widthstr, heightstr, file2)
-				if len(name) == 0:
-					name = file1
+    if isinstance(clipboard_image, list) and platform.system() == "Linux":
+        for item in clipboard_image:
+            if isinstance(item, str) and os.path.isfile(item):
+                try:
+                    clipboard_image = Image.open(item)
+                    break
+                except (OSError, IOError):
+                    pass
 
-		# phantom = sublime.Phantom(region, messag e, sublime.LAYOUT_BLOCK)
-				print("message %s" % message)
-				if not self.displayed:
-					self.view.add_phantom(name, region, message, sublime.LAYOUT_BLOCK)
-				else:
-					self.view.erase_phantoms(name)
-		# self.phantom_set.update([phantom])
-		# view.show_popup('<img src="file://c://msys64/home/chenyu/diary/diary/diary8.jpg">')
-		self.displayed = not self.displayed
+    if not isinstance(clipboard_image, Image.Image):
+        return None
 
+    # Generate filename with current timestamp
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
+    base_filename = f"Screenshot {timestamp}"
+    temp_dir = tempfile.gettempdir()
+
+    # Try saving in different formats
+    for format, extension in (("PNG", "png"), ("JPEG", "jpg")):
+        filename = f"{base_filename}.{extension}"
+        temporary_location = os.path.join(temp_dir, filename)
+        try:
+            clipboard_image.save(temporary_location, format)
+        except (OSError, ValueError):
+            continue
+        break
+
+    else:
+        raise ValueError("Failed to save image in any of the supported formats")
+
+    final_path = os.path.join(root_dir, filename)
+    os.makedirs(root_dir, exist_ok=True)
+    shutil.move(temporary_location, final_path)
+    return final_path
+
+
+class image_preview(sublime_plugin.TextCommand):
+    phantom_set = None
+    key = "image_paste_previews"
+
+    def run(self, edit):
+        view = self.view
+        if not self.phantom_set:
+            self.phantom_set = sublime.PhantomSet(view, self.key)
+
+        imgage_link_regions = view.find_by_selector("markup.underline.link.image.markdown")
+        images_to_show = []
+        for region in imgage_link_regions:
+            image_link = view.substr(region)
+            file_name = view.file_name()
+            if not os.path.isabs(image_link):
+                file_name = view.file_name()
+                if not file_name:
+                    continue
+                path = os.path.normpath(os.path.dirname(file_name))
+                image_link = f"{Path(path).as_uri()}/{image_link}"
+            images_to_show.append((image_link, region))
+
+        max_width = int(60 * view.em_width())
+        phantoms = []
+        for image_link, region in images_to_show:
+            real_file = from_uri(image_link)
+            src = encode_image_to_src(real_file)
+            width, height = calculate_image_dimensions(real_file, max_width)
+            if width is not None and height is not None:
+                content = f"<img src='{src}' width='{width}' height='{height}'/>"
+            else:
+                content = f"<img src='{src}'/>"
+            phantoms.append(sublime.Phantom(region, content, sublime.PhantomLayout.BELOW))
+
+        unchanged = all(a == b for a, b in zip_longest(phantoms, self.phantom_set.phantoms))
+        if unchanged:
+            self.phantom_set.update([])
+        else:
+            self.phantom_set.update(phantoms)
+
+
+def encode_image_to_src(filename: str) -> str:
+    """Reads an image file, converts if necessary, and returns an HTML-compatible src string."""
+    supported_formats = ('.png', '.jpg', '.jpeg')
+    file_ext = os.path.splitext(filename)[1].lower()
+
+    # If already supported, read directly
+    if file_ext in supported_formats:
+        img_format = "jpeg" if file_ext == ".jpg" else file_ext.lstrip('.')
+        with open(filename, "rb") as img_file:
+            encoded_string = base64.b64encode(img_file.read()).decode("utf-8")
+        return f'data:image/{img_format};base64,{encoded_string}'
+
+    # Otherwise, convert to PNG
+    with Image.open(filename) as img:
+        buffered = io.BytesIO()
+        img.convert("RGBA").save(buffered, format="PNG")  # Convert & save as PNG
+        encoded_string = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+    return f'data:image/png;base64,{encoded_string}'
+
+
+def calculate_image_dimensions(
+    image_path: str, max_width: int
+) -> tuple[int, int] | tuple[None, None]:
+    try:
+        with Image.open(image_path) as img:
+            width, height = img.size
+            if width > max_width:
+                ratio = max_width / width
+                return int(width * ratio), int(height * ratio)
+            return width, height
+    except Exception:
+        return None, None
+
+
+def from_uri(uri: str) -> str:  # roughly taken from Python 3.13
+    """Return a new path from the given 'file' URI."""
+    from urllib.parse import unquote_to_bytes
+    if not uri.startswith('file:'):
+        raise ValueError(f"URI does not start with 'file:': {uri!r}")
+    path = os.fsdecode(unquote_to_bytes(uri))
+    path = path[5:]
+    if path[:3] == '///':
+        # Remove empty authority
+        path = path[2:]
+    elif path[:12] == '//localhost/':
+        # Remove 'localhost' authority
+        path = path[11:]
+    if path[:3] == '///' or (path[:1] == '/' and path[2:3] in ':|'):
+        # Remove slash before DOS device/UNC path
+        path = path[1:]
+        path = path[0].upper() + path[1:]
+    if path[1:2] == '|':
+        # Replace bar with colon in DOS drive
+        path = path[:1] + ':' + path[2:]
+    path_ = Path(path)
+    if not path_.is_absolute():
+        raise ValueError(f"URI is not absolute: {uri!r}.  Parsed so far: {path_!r}")
+    return str(path_)

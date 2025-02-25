@@ -1,38 +1,37 @@
 [
-    {
-        "mnemonic": "n", 
-        "caption": "Preferences", 
-        "id": "preferences", 
+  { "id": "preferences",
+    "children": [
+      { "caption": "Package Settings",
+        "mnemonic": "P",
+        "id": "package-settings",
         "children": [
-            {
-                "mnemonic": "P", 
-                "caption": "Package Settings", 
-                "id": "package-settings", 
-                "children": [
-                    {
-                        "caption": "imagepaste", 
-                        "children": [
-                            {
-                                "caption": "Settings – Default", 
-                                "args": {
-                                    "file": "${packages}/imagepaste/imagepaste.sublime-settings"
-                                }, 
-                                "command": "open_file"
-                            }, 
-                            {
-                                "caption": "Settings – User", 
-                                "args": {
-                                    "file": "${packages}/User/imagepaste.sublime-settings"
-                                }, 
-                                "command": "open_file"
-                            }, 
-                            {
-                                "caption": "-"
-                            }
-                        ]
-                    }
-                ]
-            }
+          { "caption": "ImagePaste",
+            "children": [
+              { "caption": "README",
+                "command": "open_file",
+                "args": {
+                  "file": "${packages}/ImagePaste/README.md"
+                }
+              },
+              { "caption": "-" },
+              { "caption": "Settings",
+                "command": "edit_settings",
+                "args": {
+                  "base_file": "${packages}/ImagePaste/ImagePaste.sublime-settings",
+                  "default": "{\n\t$0\n}\n"
+                }
+              },
+              { "caption": "Key Bindings",
+                "command": "edit_settings",
+                "args": {
+                  "base_file": "${packages}/ImagePaste/Default (${platform}).sublime-keymap",
+                  "default": "[\n\t$0\n]\n"
+                }
+              },
+            ]
+          }
         ]
-    }
+      }
+    ]
+  }
 ]
