@@ -17,23 +17,28 @@ import sublime_plugin
 
 
 class image_paste(sublime_plugin.TextCommand):
-    def run(self, edit, confirm_filename=True):
+    def run(self, edit, confirm_filename=True, paste_stand_in=True):
         view = self.view
         settings = view.settings()
         window = view.window()
         if not window:
             return
+
+        clipboard_image = grab_clipboard()
+        if not clipboard_image:
+            if paste_stand_in:
+                view.run_command("paste")
+            else:
+                window.status_message("No image in clipboard")
+            return
+
         try:
             root_dir = get_root_dir(view)
         except ValueError as e:
             print("ImagePaste:", e)
             root_dir = settings.get("image_paste_last_used_dir") or str(Path().home())
 
-        full_path = save_clipboard_image(root_dir)
-        if not full_path:
-            window.status_message("No image in clipboard")
-            return
-
+        full_path = save_clipboard_image(clipboard_image, root_dir)
         if confirm_filename:
             def on_done(input_string):
                 if not input_string:
@@ -105,23 +110,14 @@ def get_root_dir(view: sublime.View) -> str:
     raise ValueError("view is unnamed and 'image_paste_folder' is not set.")
 
 
-def save_clipboard_image(root_dir: str) -> str | None:
-    """
-    Checks if an image is in the clipboard, saves it as a PNG file (or JPG if
-    PNG is not possible), and returns the filename. Returns None if no image
-    is in the clipboard. Works cross-platform on Windows, macOS, and Linux.
-
-    Returns:
-        str or None: The filename of the saved image or None if no image was
-                     found
+def grab_clipboard() -> Image.Image | None:
+    """Cross-platform function to grab an image from the clipboard.
 
     Raises:
-        ValueError: If the image cannot be processed or saved in the specified formats
         ImportError: If required modules like PIL.ImageGrab are not available on the system
     """
     # ImageGrab.grabclipboard() can raise ImportError on some platforms
     clipboard_image = ImageGrab.grabclipboard()
-
     if isinstance(clipboard_image, list) and platform.system() == "Linux":
         for item in clipboard_image:
             if isinstance(item, str) and os.path.isfile(item):
@@ -133,7 +129,22 @@ def save_clipboard_image(root_dir: str) -> str | None:
 
     if not isinstance(clipboard_image, Image.Image):
         return None
+    return clipboard_image
 
+
+def save_clipboard_image(image: Image.Image, root_dir: str) -> str:
+    """
+    Checks if an image is in the clipboard, saves it as a PNG file (or JPG if
+    PNG is not possible), and returns the filename. Returns None if no image
+    is in the clipboard. Works cross-platform on Windows, macOS, and Linux.
+
+    Returns:
+        str or None: The filename of the saved image or None if no image was
+                     found
+
+    Raises:
+        ValueError: If the image cannot be processed or saved in the specified formats
+    """
     # Generate filename with current timestamp
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
     base_filename = f"Screenshot {timestamp}"
@@ -144,7 +155,7 @@ def save_clipboard_image(root_dir: str) -> str | None:
         filename = f"{base_filename}.{extension}"
         temporary_location = os.path.join(temp_dir, filename)
         try:
-            clipboard_image.save(temporary_location, format)
+            image.save(temporary_location, format)
         except (OSError, ValueError):
             continue
         break
