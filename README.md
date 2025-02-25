@@ -6,7 +6,8 @@ image link into the file and allows previewing these images inline.
 
 ## Features
 
-- Paste images from clipboard directly into Markdown files
+- Paste images from clipboard directly into Markdown files.  You can also
+  copy and paste images from Finder/Explorer this way. Huh?[1]
 - Automatically saves images with timestamped filenames to a defined directory
   in the project.
 - Generates proper Markdown image links with URL-encoded paths
@@ -14,6 +15,10 @@ image link into the file and allows previewing these images inline.
   for animated gifs the first frame is displayed.
 - Cross-platform support (Windows, macOS, Linux) using Python's pillow/PIL
   library.
+
+[1] Either a bitmap is in the clipboard or a file-object.  Does that make sense?
+Not sure about the exact nomenclature for these things.
+
 
 ## Installation
 
@@ -35,7 +40,7 @@ from the Command Palette.
 ## Usage
 
 ### Pasting Images
-1. Copy an image to your clipboard (screenshot or copy image)
+1. Copy an image to your clipboard (screenshot or file)
 2. In Sublime Text, place your cursor where you want the image
 3. Use the command palette or a keyboard shortcut to paste:
    - Command Palette: `ImagePaste: Paste Image`

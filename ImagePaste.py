@@ -5,7 +5,6 @@ import io
 from itertools import zip_longest
 import os
 from pathlib import Path
-import platform
 import shutil
 import tempfile
 from urllib.parse import quote
@@ -118,7 +117,7 @@ def grab_clipboard() -> Image.Image | None:
     """
     # ImageGrab.grabclipboard() can raise ImportError on some platforms
     clipboard_image = ImageGrab.grabclipboard()
-    if isinstance(clipboard_image, list) and platform.system() == "Linux":
+    if isinstance(clipboard_image, list):
         for item in clipboard_image:
             if isinstance(item, str) and os.path.isfile(item):
                 try:
@@ -134,18 +133,24 @@ def grab_clipboard() -> Image.Image | None:
 
 def save_clipboard_image(image: Image.Image, root_dir: str) -> str:
     """
-    Checks if an image is in the clipboard, saves it as a PNG file (or JPG if
-    PNG is not possible), and returns the filename. Returns None if no image
-    is in the clipboard. Works cross-platform on Windows, macOS, and Linux.
+    Saves an image from the clipboard as a PNG file (or JPG if PNG is not
+    possible), and returns the filename.  If the image is already saved, it is
+    just copied to the specified directory.
+
+    Args:
+        image (Image.Image): The image to save.
+        root_dir (str): The directory where the image will be saved.
 
     Returns:
-        str or None: The filename of the saved image or None if no image was
-                     found
+        str: The filename of the saved image.
 
-    Raises:
-        ValueError: If the image cannot be processed or saved in the specified formats
+    Raises: ValueError: If the image cannot be processed or saved in the
+            specified formats.
     """
-    # Generate filename with current timestamp
+    if image.filename:
+        os.makedirs(root_dir, exist_ok=True)
+        return shutil.copy2(image.filename, root_dir)
+
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
     base_filename = f"Screenshot {timestamp}"
     temp_dir = tempfile.gettempdir()
