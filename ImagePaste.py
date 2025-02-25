@@ -19,10 +19,16 @@ import sublime_plugin
 class image_paste(sublime_plugin.TextCommand):
     def run(self, edit, confirm_filename=True):
         view = self.view
+        settings = view.settings()
         window = view.window()
         if not window:
             return
-        root_dir = get_root_dir(view)
+        try:
+            root_dir = get_root_dir(view)
+        except ValueError as e:
+            print("ImagePaste:", e)
+            root_dir = settings.get("image_paste_last_used_dir") or str(Path().home())
+
         full_path = save_clipboard_image(root_dir)
         if not full_path:
             window.status_message("No image in clipboard")
@@ -35,6 +41,7 @@ class image_paste(sublime_plugin.TextCommand):
                     return
 
                 dir = os.path.dirname(input_string)
+                settings.set("image_paste_last_used_dir", dir)
                 os.makedirs(dir, exist_ok=True)
                 shutil.move(full_path, input_string)
                 self.insert_image_path(input_string)
