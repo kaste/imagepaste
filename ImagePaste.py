@@ -97,7 +97,7 @@ class image_paste(sublime_plugin.TextCommand):
 
 
 transformers = [
-    ("text.html.markdown", lambda filename: f"![$0]({uri_quote(filename)})"),
+    ("text.html.markdown", lambda filename: f"![$0]({escape_for_md(filename)})"),
     ("text.restructuredtext", lambda f: f".. $0image:: {escape_for_rst(f)}"),
 ]
 
@@ -300,6 +300,25 @@ def from_uri(uri: str) -> str:  # roughly taken from Python 3.13
     if not path_.is_absolute():
         raise ValueError(f"URI is not absolute: {uri!r}.  Parsed so far: {path_!r}")
     return str(path_)
+
+
+def escape_for_md(filename: str) -> str:
+    """
+    Escapes a filename for use in Markdown image directives.
+
+    If the filename contains any whitespace characters, it wraps the filename
+    in angle brackets and replaces any '<' and '>' characters with their
+    URL-encoded equivalents (%3C and %3E, respectively).
+
+    Args:
+        filename: The filename to escape.
+
+    Returns:
+        The escaped filename suitable for Markdown.
+    """
+    if re.search(r"\s", filename):
+        return "<{}>".format(filename.replace("<", r"%3C").replace(">", "%3E"))
+    return filename
 
 
 def escape_for_rst(filename: str) -> str:
