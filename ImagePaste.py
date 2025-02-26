@@ -5,9 +5,10 @@ import io
 from itertools import zip_longest
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
-from urllib.parse import quote
+from urllib.parse import quote as uri_quote
 
 from PIL import Image, ImageGrab
 
@@ -96,7 +97,8 @@ class image_paste(sublime_plugin.TextCommand):
 
 
 transformers = [
-    ("text.html.markdown", lambda filename: f"![$0]({quote(filename)})"),
+    ("text.html.markdown", lambda filename: f"![$0]({uri_quote(filename)})"),
+    ("text.restructuredtext", lambda f: f".. $0image:: {escape_for_rst(f)}"),
 ]
 
 
@@ -298,3 +300,30 @@ def from_uri(uri: str) -> str:  # roughly taken from Python 3.13
     if not path_.is_absolute():
         raise ValueError(f"URI is not absolute: {uri!r}.  Parsed so far: {path_!r}")
     return str(path_)
+
+
+def escape_for_rst(filename: str) -> str:
+    """
+    Escape a filename for use in reStructuredText image/figure directives.
+
+    - Returns unmodified filename if it contains only safe characters
+    - Uses quotes if spaces or basic special characters are present
+    - Uses URI escaping for characters that quotes can't handle safely
+
+    Args:
+        filename: The filename to escape
+
+    Returns:
+        Properly escaped filename for RST
+    """
+    # Pattern for "safe" filenames that need no escaping
+    safe_pattern = r'^[a-zA-Z0-9_\-./]+$'
+
+    # Pattern for filenames that can be handled with quotes
+    quote_safe_pattern = r'^[a-zA-Z0-9_\-./\s!@%&()=+,;]+$'
+
+    if re.match(safe_pattern, filename):
+        return filename
+    if re.match(quote_safe_pattern, filename):
+        return f'"{filename}"'
+    return uri_quote(filename)
