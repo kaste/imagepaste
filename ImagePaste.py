@@ -85,10 +85,19 @@ class image_paste(sublime_plugin.TextCommand):
         else:
             text_to_insert = full_path
         for pos in view.sel():
-            if 'text.html.markdown' in view.scope_name(pos.begin()):
-                text_to_insert = f"![]({quote(text_to_insert)})"
-            view.run_command("insert", {"characters": text_to_insert})
+            scope_at_pos = view.scope_name(pos.begin())
+            for scope, fn in transformers:
+                if scope in scope_at_pos:
+                    view.run_command("insert_snippet", {"contents": fn(text_to_insert)})
+                    break
+            else:
+                view.run_command("insert", {"characters": text_to_insert})
             break
+
+
+transformers = [
+    ("text.html.markdown", lambda filename: f"![$0]({quote(filename)})"),
+]
 
 
 def get_root_dir(view: sublime.View) -> str:
