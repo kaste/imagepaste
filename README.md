@@ -40,13 +40,45 @@ from the Command Palette.
 ## Usage
 
 ### Pasting Images
+That should come very natural:
 1. Copy an image to your clipboard (screenshot or file)
 2. In Sublime Text, place your cursor where you want the image
 3. Use the command palette or a keyboard shortcut to paste:
    - Command Palette: `ImagePaste: Paste Image`
-   - Default shortcut: None (set your own in key bindings)
-4. Optionally modify the suggested filename
-5. The image will be saved and a Markdown link will be inserted
+   - Default shortcut: the one you use for "paste", e.g. `ctrl+v`[2]
+4. Optionally modify the suggested filename.  (Hit `[ESC]` to abort.)
+5. The image will be saved and a link will be inserted
+
+[2] This plugin listens for "paste" commands, and replaces its functionality
+**if** an image is in the clipboard.  If there is not, nothing should change.
+You can turn this off by setting `leave_my_keys_alone.ImagePaste` in the user
+preferences or anywhere where you can define so-called view-settings, e.g.
+in the project file, in the syntax settings, or ... well ... on a view.
+
+Using this approach `ctrl+v`/`super+v` just works, just with a wider
+feature set.  But also `win+v` (on Windows) just works.  It is not recommended
+to make a standard binding *overwriting* `ctrl+v` in your user key bindings.
+It would likely also overrule other packages that might bind that same chord,
+but with sophisticated contexts.  Think of: GitSavvy, FileBrowser, or others.
+
+Anyway, if you want to bind the command somehow, here are its options with its
+defaults.
+
+```json
+    {
+        "command": "image_paste",
+        "args": {
+            // delegate to the standard "paste" command, if there is in fact no
+            // image in the clipboard.
+            "paste_stand_in": true,
+            // open the input box to confirm or alter the filename, or to
+            // escape the command.
+            "confirm_filename": true,
+        }
+    },
+
+```
+
 
 ### Image Preview
 1. Open any Markdown file with image links

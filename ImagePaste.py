@@ -15,6 +15,21 @@ import sublime
 import sublime_plugin
 
 
+class image_paste_injector(sublime_plugin.EventListener):
+    def on_text_command(
+        self,
+        view: sublime.View,
+        command_name: str,
+        args: sublime.CommandArgs | None
+    ) -> tuple[str, sublime.CommandArgs] | None:
+        if (
+            command_name == "paste"
+            and not view.settings().get("leave_my_keys_alone.ImagePaste")
+        ):
+            return ("image_paste", {"paste_stand_in": True})
+        return None
+
+
 class image_paste(sublime_plugin.TextCommand):
     def run(self, edit, confirm_filename=True, paste_stand_in=True):
         view = self.view
