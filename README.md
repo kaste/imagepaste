@@ -105,13 +105,14 @@ global Preferences or Syntax settings, or on the view.
 ```
 
 If nothing is set, the files are saved besides the open file.  But do note,
-that ImagePaste will ask you to confirm or change the final filename.
-
+that ImagePaste will ask you to confirm or change the final filename and
+remembers the last used folder.  Therefore, setting this globally should be
+unnecessary.  That's at least the idea.
 
 
 ### CAVEAT
 
 The preview only supports Mardown files.  Technically, it would work with any
 files but only for Markdown there are very simple selectors available (fed by
-its syntax) to find and grab the linked images.  So, we would need these
-"extractors" for rst or other file types to make this feature broadly useful.
+its syntax) to find and grab the linked images.  We would need some kind of
+"extractors" for RST or other file types to make this feature broadly useful.
