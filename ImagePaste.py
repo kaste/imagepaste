@@ -51,7 +51,7 @@ class image_paste(sublime_plugin.TextCommand):
             root_dir = get_root_dir(view)
         except ValueError as e:
             print("ImagePaste:", e)
-            root_dir = settings.get("image_paste_last_used_dir") or str(Path().home())
+            root_dir = str(Path().home())
 
         full_path = save_clipboard_image(clipboard_image, root_dir)
         if confirm_filename:
@@ -128,6 +128,11 @@ def get_root_dir(view: sublime.View) -> str:
             f"is set to be relative to one."
         )
 
+    if (
+        (last_used := view.settings().get("image_paste_last_used_dir"))
+        and os.path.exists(last_used)
+    ):
+        return last_used
     if file_name := view.file_name():
         return os.path.dirname(file_name)
     if (window := view.window()) and (folders := window.folders()):
