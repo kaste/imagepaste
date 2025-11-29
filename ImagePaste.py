@@ -82,9 +82,10 @@ class image_paste(sublime_plugin.TextCommand):
         view = self.view
         file_name = view.file_name()
         if file_name:
-            text_to_insert = os.path.relpath(full_path, os.path.dirname(file_name))
+            text_to_insert_ = os.path.relpath(full_path, os.path.dirname(file_name))
         else:
-            text_to_insert = full_path
+            text_to_insert_ = full_path
+        text_to_insert = text_to_insert_.replace("\\", "/")
         for pos in view.sel():
             scope_at_pos = view.scope_name(pos.begin())
             for scope, fn in transformers:
