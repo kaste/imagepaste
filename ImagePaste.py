@@ -142,12 +142,18 @@ def get_root_dir(view: sublime.View) -> str:
 
 
 def grab_clipboard() -> Image.Image | None:
-    """Cross-platform function to grab an image from the clipboard.
+    """Return an image from the clipboard, if one is available.
 
-    Raises:
-        ImportError: If required modules like PIL.ImageGrab are not available on the system
+    Pillow's ImageGrab.grabclipboard() implementation is platform-specific:
+    Windows uses Pillow's direct Win32 clipboard API wrapper and is expected to
+    be cheap enough for the normal paste path. macOS shells out to osascript,
+    and Linux shells out to wl-paste or xclip, so on those platforms every
+    intercepted paste command may spawn a small, usually fast, subprocess.
+
+    On Linux, ImageGrab.grabclipboard() may raise NotImplementedError when no
+    supported clipboard helper is available, or ChildProcessError when a helper
+    fails unexpectedly.
     """
-    # ImageGrab.grabclipboard() can raise ImportError on some platforms
     clipboard_image = ImageGrab.grabclipboard()
     if isinstance(clipboard_image, list):
         for item in clipboard_image:
